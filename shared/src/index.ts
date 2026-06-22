@@ -7,5 +7,6 @@ export function add(a: number, b: number): number {
 }
 
 export function multiply(a: number, b: number): number {
+  console.log("inside multiply")
   return a * b;
 }
