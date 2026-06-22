@@ -6,8 +6,14 @@
     "pnpm-workspace.yaml"
   ],
   "tasks": {
-    "build": {},
-    "lint": {},
-    "typecheck": {}
+    "build": {
+      "inputs": ["**", "!**/*.md"]
+    },
+    "lint": {
+      "inputs": ["**", "!**/*.md"]
+    },
+    "typecheck": {
+      "inputs": ["**", "!**/*.md"]
+    }
   }
 }
