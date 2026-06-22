@@ -1,33 +1,11 @@
-name: CI
+name: Merge
 
 on:
-  pull_request:
-    branches: [main]
   push:
     branches: [main]
 
 jobs:
-  checks:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - run: pnpm turbo lint
-
-      - run: pnpm turbo typecheck
-
   release:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -46,7 +24,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build, tag, and upload
-        id: build
         shell: bash
         run: |
           set -euo pipefail
@@ -78,7 +55,6 @@ jobs:
 
           if [ -z "$CHANGED" ]; then
             echo "::notice::All builds cached — nothing to tag"
-            exit 0
           fi
 
           for pkg in $CHANGED; do
