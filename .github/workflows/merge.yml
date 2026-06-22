@@ -57,8 +57,7 @@ jobs:
           echo "be_miss=false" >> "$GITHUB_OUTPUT"
 
           if [ -z "$CHANGED" ]; then
-            echo "::notice::All builds cached — nothing to tag"
-            exit 0
+            echo "::notice::All builds cached — no new tags"
           fi
 
           for pkg in $CHANGED; do
@@ -91,14 +90,12 @@ jobs:
           done
 
       - name: Upload frontend artifact
-        if: steps.release.outputs.fe_miss == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: fe-dist
           path: frontend/dist/
 
       - name: Upload backend artifact
-        if: steps.release.outputs.be_miss == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: be-dist
