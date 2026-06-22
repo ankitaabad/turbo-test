@@ -9,6 +9,7 @@
   ],
   "tasks": {
     "build": {
+      "dependsOn": ["^build"],
       "outputs": ["dist/**"],
       "inputs": ["**", "!**/*.md"]
     },
