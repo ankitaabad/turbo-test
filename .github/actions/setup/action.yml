@@ -14,23 +14,14 @@ runs:
         fetch-depth: ${{ inputs.fetch-depth }}
 
     - uses: pnpm/action-setup@v4
+      with:
+        version: 10
+        run_install: false
 
     - uses: actions/setup-node@v4
       with:
-        node-version: 22
+        node-version: 24
+        cache: pnpm
 
-    - name: Restore node_modules
-      uses: actions/cache@v4
-      id: cache
-      with:
-        path: |
-          node_modules
-          frontend/node_modules
-          backend/node_modules
-          shared/node_modules
-        key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-    - name: Install dependencies
-      if: steps.cache.outputs.cache-hit != 'true'
-      run: pnpm install --frozen-lockfile
+    - run: pnpm install --frozen-lockfile
       shell: bash
