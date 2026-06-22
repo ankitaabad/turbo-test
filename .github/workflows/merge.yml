@@ -66,9 +66,7 @@ jobs:
             git push origin "$TAG"
             echo "::notice::Created tag ${TAG}"
 
-            cat > "${pkg}/dist/manifest.json" <<EOM
-{"tag":"${TAG}","buildNumber":${BUILD_NUM},"hash":"${HASH}"}
-EOM
+            printf '{"tag":"%s","buildNumber":%s,"hash":"%s"}\n' "$TAG" "$BUILD_NUM" "$HASH" > "${pkg}/dist/manifest.json"
 
             echo "${pkg}_upload=true" >> "$GITHUB_OUTPUT"
             echo "${pkg}_hash=${HASH}" >> "$GITHUB_OUTPUT"
