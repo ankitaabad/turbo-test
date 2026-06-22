@@ -11,13 +11,13 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"],
-      "inputs": ["**", "!**/*.md"]
+      "inputs": ["**", "!**/*.md", "!.turbo/**"]
     },
     "lint": {
-      "inputs": ["**", "!**/*.md"]
+      "inputs": ["**", "!**/*.md", "!.turbo/**"]
     },
     "typecheck": {
-      "inputs": ["**", "!**/*.md"]
+      "inputs": ["**", "!**/*.md", "!.turbo/**"]
     }
   }
 }

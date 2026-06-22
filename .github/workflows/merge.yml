@@ -44,11 +44,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          dry_hash() {
-            local pkg=$1
-            echo "$DRY_JSON" | jq -r ".tasks[] | select(.taskId == \"${pkg}#build\") | .hash[:8]"
-          }
-
           artifact_exists() {
             local name=$1
             local prefix=$(echo "$name" | cut -d- -f1)
@@ -60,19 +55,12 @@ jobs:
             local prefix=$1 pkg=$2 hash=$3
             local latest tag num
 
-            echo "::debug::tag_package: prefix=${prefix} pkg=${pkg} hash=${hash}"
-
             latest=$(git tag -l "${prefix}-*" | sed -n "s/^${prefix}-\([0-9]\{1,\}\)-.*/\1/p" | sort -n | tail -1)
             num=$(( ${latest:-0} + 1 ))
             tag="${prefix}-${num}-${hash}"
 
-            echo "::debug::tag_package: latest=${latest:-none} num=${num} tag=${tag}"
-
             git tag -a "$tag" -m "turbo-hash: ${hash}"
-            echo "::debug::tag_package: git tag OK"
-
             git push origin "$tag"
-            echo "::debug::tag_package: git push OK"
 
             mkdir -p "${pkg}/dist"
             printf '{"tag":"%s","buildNumber":%s,"hash":"%s"}\n' "$tag" "$num" "$hash" > "${pkg}/dist/manifest.json"
@@ -80,61 +68,47 @@ jobs:
             gh release create "$tag" "${pkg}/dist/*" \
               --title "${prefix} build ${num}" \
               --notes "turbo-hash: ${hash}"
-            echo "::debug::tag_package: release created, done"
+            echo "::notice::Created tag ${tag}"
           }
 
-          echo "::debug::Running dry run..."
           DRY_JSON=$(pnpm turbo build --dry=json 2>&1 | sed -n '/^{/,$ p')
-          echo "::debug::Dry run captured (${#DRY_JSON} bytes)"
 
-          FE_HASH=$(dry_hash frontend)
-          BE_HASH=$(dry_hash backend)
-          echo "::debug::FE_HASH=${FE_HASH:-empty} BE_HASH=${BE_HASH:-empty}"
+          read FE_HASH BE_HASH <<< $(echo "$DRY_JSON" | jq -r '
+            .tasks[]
+            | select(.taskId == "frontend#build" or .taskId == "backend#build")
+            | .hash[:8]
+          ' | tr '\n' ' ')
 
           FE_UPLOAD=false
           BE_UPLOAD=false
           NEED_BUILD=false
 
           if [ -n "$FE_HASH" ] && ! artifact_exists "fe-${FE_HASH}"; then
-            echo "::debug::FE needs upload"
             FE_UPLOAD=true
             NEED_BUILD=true
           else
-            echo "::notice::Artifact fe-${FE_HASH:-?} already exists — skipping"
+            echo "::notice::Release fe-${FE_HASH:-?} already exists — skipping"
           fi
 
           if [ -n "$BE_HASH" ] && ! artifact_exists "be-${BE_HASH}"; then
-            echo "::debug::BE needs upload"
             BE_UPLOAD=true
             NEED_BUILD=true
           else
-            echo "::notice::Artifact be-${BE_HASH:-?} already exists — skipping"
+            echo "::notice::Release be-${BE_HASH:-?} already exists — skipping"
           fi
-
-          echo "::debug::NEED_BUILD=${NEED_BUILD} FE_UPLOAD=${FE_UPLOAD} BE_UPLOAD=${BE_UPLOAD}"
 
           if [ "$NEED_BUILD" = true ]; then
             pnpm turbo build --remote-only
-            echo "::debug::Build finished"
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           if [ "$FE_UPLOAD" = true ]; then
-            echo "::debug::Tagging and uploading frontend..."
             tag_package "fe" "frontend" "$FE_HASH"
           fi
 
           if [ "$BE_UPLOAD" = true ]; then
-            echo "::debug::Tagging and uploading backend..."
             tag_package "be" "backend" "$BE_HASH"
           fi
-
-          echo "frontend_upload=${FE_UPLOAD}" >> "$GITHUB_OUTPUT"
-          echo "frontend_hash=${FE_HASH:-}" >> "$GITHUB_OUTPUT"
-          echo "backend_upload=${BE_UPLOAD}" >> "$GITHUB_OUTPUT"
-          echo "backend_hash=${BE_HASH:-}" >> "$GITHUB_OUTPUT"
-
-          echo "::debug::Script finished OK"
 

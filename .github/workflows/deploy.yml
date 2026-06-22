@@ -6,19 +6,12 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - name: Require tag
         if: github.ref_type != 'tag'
         run: |
           echo "::error::Deploy can only be triggered from a tag, not a branch"
           exit 1
-
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.ref }}
-          fetch-depth: 0
 
       - name: Resolve artifact from tag
         id: resolve
@@ -34,14 +27,11 @@ jobs:
             exit 1
           fi
 
-          ARTIFACT="${PREFIX}-${HASH}"
-
           echo "prefix=${PREFIX}" >> "$GITHUB_OUTPUT"
           echo "buildNumber=${BUILD_NUM}" >> "$GITHUB_OUTPUT"
           echo "hash=${HASH}" >> "$GITHUB_OUTPUT"
-          echo "artifact=${ARTIFACT}" >> "$GITHUB_OUTPUT"
 
-          echo "::notice::Resolved ${TAG} → artifact ${ARTIFACT}"
+          echo "::notice::Resolved ${TAG}"
 
       - name: Download release assets
         env:
