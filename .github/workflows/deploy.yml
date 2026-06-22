@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to deploy (e.g., fe-v0.0.1)"
+        description: "Tag to deploy (e.g., fe-1-a1b2c3d4)"
         required: true
         type: string
 
@@ -23,24 +23,20 @@ jobs:
         run: |
           TAG="${{ inputs.tag }}"
 
-          HASH=$(git tag -l --format='%(contents)' "$TAG" | grep -oP 'turbo-hash:\s+\K\S+')
+          PREFIX=$(echo "$TAG" | cut -d- -f1)
+          BUILD_NUM=$(echo "$TAG" | cut -d- -f2)
+          HASH=$(echo "$TAG" | cut -d- -f3)
 
-          if [ -z "$HASH" ]; then
-            echo "::error::Tag ${TAG} has no turbo-hash metadata"
-            exit 1
-          fi
-
-          PREFIX=$(echo "$TAG" | grep -oP '^(fe|be)')
-
-          if [ -z "$PREFIX" ]; then
-            echo "::error::Cannot determine package prefix from tag ${TAG}"
+          if [ -z "$PREFIX" ] || [ -z "$BUILD_NUM" ] || [ -z "$HASH" ]; then
+            echo "::error::Invalid tag format. Expected: fe-1-a1b2c3d4"
             exit 1
           fi
 
           ARTIFACT="${PREFIX}-${HASH}"
 
-          echo "hash=${HASH}" >> "$GITHUB_OUTPUT"
           echo "prefix=${PREFIX}" >> "$GITHUB_OUTPUT"
+          echo "buildNumber=${BUILD_NUM}" >> "$GITHUB_OUTPUT"
+          echo "hash=${HASH}" >> "$GITHUB_OUTPUT"
           echo "artifact=${ARTIFACT}" >> "$GITHUB_OUTPUT"
 
           echo "::notice::Resolved ${TAG} → artifact ${ARTIFACT}"
@@ -54,8 +50,16 @@ jobs:
       - name: Deploy
         run: |
           echo "=== Deploying ${{ steps.resolve.outputs.prefix }} ==="
-          echo "Tag:    ${{ inputs.tag }}"
-          echo "Hash:   ${{ steps.resolve.outputs.hash }}"
+          echo "Tag:         ${{ inputs.tag }}"
+          echo "Build:       ${{ steps.resolve.outputs.buildNumber }}"
+          echo "Hash:        ${{ steps.resolve.outputs.hash }}"
+
+          if [ -f ./dist/manifest.json ]; then
+            echo "Manifest:"
+            cat ./dist/manifest.json
+          fi
+
+          echo ""
           echo "Files:"
           find ./dist -type f | sort
           echo ""
