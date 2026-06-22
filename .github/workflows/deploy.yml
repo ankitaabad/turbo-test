@@ -1,12 +1,6 @@
 name: Deploy
 
-on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag to deploy (e.g., fe-1-a1b2c3d4)"
-        required: true
-        type: string
+on: workflow_dispatch
 
 jobs:
   deploy:
@@ -14,14 +8,21 @@ jobs:
     permissions:
       actions: read
     steps:
+      - name: Require tag
+        if: github.ref_type != 'tag'
+        run: |
+          echo "::error::Deploy can only be triggered from a tag, not a branch"
+          exit 1
+
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.ref }}
           fetch-depth: 0
 
       - name: Resolve artifact from tag
         id: resolve
         run: |
-          TAG="${{ inputs.tag }}"
+          TAG="${{ github.ref_name }}"
 
           PREFIX=$(echo "$TAG" | cut -d- -f1)
           BUILD_NUM=$(echo "$TAG" | cut -d- -f2)
@@ -50,7 +51,7 @@ jobs:
       - name: Deploy
         run: |
           echo "=== Deploying ${{ steps.resolve.outputs.prefix }} ==="
-          echo "Tag:         ${{ inputs.tag }}"
+          echo "Tag:         ${{ github.ref_name }}"
           echo "Build:       ${{ steps.resolve.outputs.buildNumber }}"
           echo "Hash:        ${{ steps.resolve.outputs.hash }}"
 
@@ -63,4 +64,4 @@ jobs:
           echo "Files:"
           find ./dist -type f | sort
           echo ""
-          echo "::notice::Deploy complete for ${{ inputs.tag }}"
+          echo "::notice::Deploy complete for ${{ github.ref_name }}"
