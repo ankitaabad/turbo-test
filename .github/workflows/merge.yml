@@ -33,46 +33,72 @@ jobs:
         run: |
           set -euo pipefail
 
-          SUMMARY=$(pnpm turbo build --summarize 2>&1 | sed -n 's/^Summary:\s*//p')
+          dry_hash() {
+            local pkg=$1
+            echo "$DRY_JSON" | jq -r ".tasks[] | select(.taskId == \"${pkg}#build\") | .hash[:8]"
+          }
 
-          if [ -z "$SUMMARY" ] || [ ! -f "$SUMMARY" ]; then
-            echo "::error::Failed to get run summary from turbo build"
-            exit 1
+          artifact_exists() {
+            local name=$1
+            local count
+            count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${name}" --jq '.total_count')
+            [ "$count" -gt 0 ]
+          }
+
+          tag_package() {
+            local prefix=$1 pkg=$2 hash=$3
+            local latest tag num
+
+            latest=$(git tag -l "${prefix}-*" | sed "s/^${prefix}-//" | grep -E '^[0-9]+-' | cut -d- -f1 | sort -n | tail -1)
+            num=$(( ${latest:-0} + 1 ))
+            tag="${prefix}-${num}-${hash}"
+
+            git tag -a "$tag" -m "turbo-hash: ${hash}"
+            git push origin "$tag"
+            echo "::notice::Created tag ${tag}"
+
+            printf '{"tag":"%s","buildNumber":%s,"hash":"%s"}\n' "$tag" "$num" "$hash" > "${pkg}/dist/manifest.json"
+          }
+
+          DRY_JSON=$(pnpm turbo build --dry=json 2>&1 | tail -n +2)
+
+          FE_HASH=$(dry_hash frontend)
+          BE_HASH=$(dry_hash backend)
+
+          FE_UPLOAD=false
+          BE_UPLOAD=false
+          NEED_BUILD=false
+
+          if [ -n "$FE_HASH" ] && ! artifact_exists "fe-${FE_HASH}"; then
+            FE_UPLOAD=true
+            NEED_BUILD=true
+          else
+            echo "::notice::Artifact fe-${FE_HASH:-?} already exists — skipping"
           fi
 
-          for pkg in frontend backend; do
-            HASH=$(jq -r ".tasks[] | select(.taskId == \"${pkg}#build\") | .hash" "$SUMMARY")
-            if [ -z "$HASH" ]; then
-              continue
-            fi
+          if [ -n "$BE_HASH" ] && ! artifact_exists "be-${BE_HASH}"; then
+            BE_UPLOAD=true
+            NEED_BUILD=true
+          else
+            echo "::notice::Artifact be-${BE_HASH:-?} already exists — skipping"
+          fi
 
-            case "$pkg" in
-              frontend) PREFIX="fe" ;;
-              backend)  PREFIX="be" ;;
-            esac
+          if [ "$NEED_BUILD" = true ]; then
+            pnpm turbo build
+          fi
 
-            ARTIFACT="${PREFIX}-${HASH}"
+          if [ "$FE_UPLOAD" = true ]; then
+            tag_package "fe" "frontend" "$FE_HASH"
+          fi
 
-            EXISTS=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${ARTIFACT}" --jq '.total_count')
+          if [ "$BE_UPLOAD" = true ]; then
+            tag_package "be" "backend" "$BE_HASH"
+          fi
 
-            if [ "$EXISTS" -gt 0 ]; then
-              echo "::notice::Artifact ${ARTIFACT} already exists — skipping"
-              continue
-            fi
-
-            LATEST_NUM=$(git tag -l "${PREFIX}-*" | sed "s/^${PREFIX}-//" | grep -E '^[0-9]+-' | cut -d- -f1 | sort -n | tail -1)
-            BUILD_NUM=$(( ${LATEST_NUM:-0} + 1 ))
-
-            TAG="${PREFIX}-${BUILD_NUM}-${HASH}"
-            git tag -a "$TAG" -m "turbo-hash: ${HASH}"
-            git push origin "$TAG"
-            echo "::notice::Created tag ${TAG}"
-
-            printf '{"tag":"%s","buildNumber":%s,"hash":"%s"}\n' "$TAG" "$BUILD_NUM" "$HASH" > "${pkg}/dist/manifest.json"
-
-            echo "${pkg}_upload=true" >> "$GITHUB_OUTPUT"
-            echo "${pkg}_hash=${HASH}" >> "$GITHUB_OUTPUT"
-          done
+          echo "frontend_upload=${FE_UPLOAD}" >> "$GITHUB_OUTPUT"
+          echo "frontend_hash=${FE_HASH:-}" >> "$GITHUB_OUTPUT"
+          echo "backend_upload=${BE_UPLOAD}" >> "$GITHUB_OUTPUT"
+          echo "backend_hash=${BE_HASH:-}" >> "$GITHUB_OUTPUT"
 
       - name: Upload frontend artifact
         if: steps.release.outputs.frontend_upload == 'true'
