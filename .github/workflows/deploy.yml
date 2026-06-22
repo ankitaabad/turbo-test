@@ -8,7 +8,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: read
     steps:
       - name: Require tag
         if: github.ref_type != 'tag'
@@ -44,27 +43,11 @@ jobs:
 
           echo "::notice::Resolved ${TAG} → artifact ${ARTIFACT}"
 
-      - name: Resolve merge run
-        id: merge-run
+      - name: Download release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          COMMIT=$(git rev-list -n 1 "${{ github.ref }}")
-          RUN_ID=$(gh api "repos/${{ github.repository }}/actions/workflows/merge.yml/runs" \
-            -f head_sha="$COMMIT" --jq '.workflow_runs[0].id')
-          if [ -z "$RUN_ID" ]; then
-            echo "::error::No merge workflow run found for commit ${COMMIT}"
-            exit 1
-          fi
-          echo "run-id=${RUN_ID}" >> "$GITHUB_OUTPUT"
-
-      - name: Download artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: ${{ steps.resolve.outputs.artifact }}
-          path: ./dist
-          github-token: ${{ github.token }}
-          run-id: ${{ steps.merge-run.outputs.run-id }}
+          gh release download "${{ github.ref_name }}" --dir ./dist
 
       - name: Deploy
         run: |

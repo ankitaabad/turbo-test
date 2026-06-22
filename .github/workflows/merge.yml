@@ -51,9 +51,9 @@ jobs:
 
           artifact_exists() {
             local name=$1
-            local count
-            count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${name}" --jq '.total_count')
-            [ "$count" -gt 0 ]
+            local prefix=$(echo "$name" | cut -d- -f1)
+            local hash=$(echo "$name" | cut -d- -f2)
+            git tag -l "${prefix}-*-${hash}" | grep -q .
           }
 
           tag_package() {
@@ -74,11 +74,13 @@ jobs:
             git push origin "$tag"
             echo "::debug::tag_package: git push OK"
 
-            echo "::notice::Created tag ${tag}"
-
             mkdir -p "${pkg}/dist"
             printf '{"tag":"%s","buildNumber":%s,"hash":"%s"}\n' "$tag" "$num" "$hash" > "${pkg}/dist/manifest.json"
-            echo "::debug::tag_package: manifest written, done"
+
+            gh release create "$tag" "${pkg}/dist/*" \
+              --title "${prefix} build ${num}" \
+              --notes "turbo-hash: ${hash}"
+            echo "::debug::tag_package: release created, done"
           }
 
           echo "::debug::Running dry run..."
@@ -136,16 +138,3 @@ jobs:
 
           echo "::debug::Script finished OK"
 
-      - name: Upload frontend artifact
-        if: steps.release.outputs.frontend_upload == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: fe-${{ steps.release.outputs.frontend_hash }}
-          path: frontend/dist/
-
-      - name: Upload backend artifact
-        if: steps.release.outputs.backend_upload == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: be-${{ steps.release.outputs.backend_hash }}
-          path: backend/dist/
