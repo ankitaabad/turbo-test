@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: ./.github/actions/setup
         with:
@@ -25,6 +26,8 @@ jobs:
       - name: Build, tag, and upload
         id: release
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -51,29 +54,25 @@ jobs:
             exit 1
           fi
 
-          CHANGED=$(jq -r '.tasks[] | select(.taskId | endswith("#build")) | select(.cache.status == "MISS") | .package' "$SUMMARY")
+          for pkg in frontend backend; do
+            HASH=$(jq -r ".tasks[] | select(.taskId == \"${pkg}#build\") | .hash" "$SUMMARY")
+            if [ -z "$HASH" ]; then
+              continue
+            fi
 
-          echo "fe_miss=false" >> "$GITHUB_OUTPUT"
-          echo "be_miss=false" >> "$GITHUB_OUTPUT"
-
-          if [ -z "$CHANGED" ]; then
-            echo "::notice::All builds cached — no new tags"
-          fi
-
-          for pkg in $CHANGED; do
             case "$pkg" in
-              frontend)
-                PREFIX="fe"
-                echo "fe_miss=true" >> "$GITHUB_OUTPUT"
-                ;;
-              backend)
-                PREFIX="be"
-                echo "be_miss=true" >> "$GITHUB_OUTPUT"
-                ;;
-              *)
-                continue
-                ;;
+              frontend) PREFIX="fe" ;;
+              backend)  PREFIX="be" ;;
             esac
+
+            ARTIFACT="${PREFIX}-${HASH}"
+
+            EXISTS=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${ARTIFACT}" --jq '.total_count')
+
+            if [ "$EXISTS" -gt 0 ]; then
+              echo "::notice::Artifact ${ARTIFACT} already exists — skipping"
+              continue
+            fi
 
             LATEST=$(git tag -l "${PREFIX}-v*" | sort -V | tail -1)
             if [ -z "$LATEST" ]; then
@@ -84,19 +83,24 @@ jobs:
             fi
 
             TAG="${PREFIX}-v${VERSION}"
-            git tag "$TAG"
+            git tag -a "$TAG" -m "turbo-hash: ${HASH}"
             git push origin "$TAG"
-            echo "::notice::Created tag ${TAG}"
+            echo "::notice::Created tag ${TAG} ($HASH)"
+
+            echo "${pkg}_upload=true" >> "$GITHUB_OUTPUT"
+            echo "${pkg}_hash=${HASH}" >> "$GITHUB_OUTPUT"
           done
 
       - name: Upload frontend artifact
+        if: steps.release.outputs.frontend_upload == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: fe-dist
+          name: fe-${{ steps.release.outputs.frontend_hash }}
           path: frontend/dist/
 
       - name: Upload backend artifact
+        if: steps.release.outputs.backend_upload == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: be-dist
+          name: be-${{ steps.release.outputs.backend_hash }}
           path: backend/dist/
