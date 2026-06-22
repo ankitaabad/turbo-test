@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm turbo lint
+
+      - run: pnpm turbo typecheck
+
+  release:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build, tag, and upload
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          bump_semver() {
+            local v=$1
+            local major minor patch
+            IFS='.' read -r major minor patch <<< "$v"
+            patch=$((patch + 1))
+            if [ "$patch" -ge 6 ]; then
+              patch=0
+              minor=$((minor + 1))
+              if [ "$minor" -ge 10 ]; then
+                minor=0
+                major=$((major + 1))
+              fi
+            fi
+            echo "${major}.${minor}.${patch}"
+          }
+
+          SUMMARY=$(pnpm turbo build --summarize 2>&1 | sed -n 's/^Summary:\s*//p')
+
+          if [ -z "$SUMMARY" ] || [ ! -f "$SUMMARY" ]; then
+            echo "::error::Failed to get run summary from turbo build"
+            exit 1
+          fi
+
+          CHANGED=$(jq -r '.tasks[] | select(.taskId | endswith("#build")) | select(.cache.status == "MISS") | .package' "$SUMMARY")
+
+          if [ -z "$CHANGED" ]; then
+            echo "::notice::All builds cached — nothing to tag"
+            exit 0
+          fi
+
+          for pkg in $CHANGED; do
+            case "$pkg" in
+              frontend) PREFIX="fe" ;;
+              backend)  PREFIX="be" ;;
+              *)        continue ;;
+            esac
+
+            LATEST=$(git tag -l "${PREFIX}-v*" | sort -V | tail -1)
+            if [ -z "$LATEST" ]; then
+              VERSION="0.0.1"
+            else
+              CURRENT="${LATEST#${PREFIX}-v}"
+              VERSION=$(bump_semver "$CURRENT")
+            fi
+
+            TAG="${PREFIX}-v${VERSION}"
+            git tag "$TAG"
+            git push origin "$TAG"
+            echo "::notice::Created tag ${TAG}"
+          done
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fe-dist
+          path: frontend/dist/
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: be-dist
+          path: backend/dist/
