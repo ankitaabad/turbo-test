@@ -58,7 +58,7 @@ jobs:
               continue
             fi
 
-            LATEST_NUM=$(git tag -l "${PREFIX}-[0-9]-*" | sed "s/^${PREFIX}-//" | cut -d- -f1 | sort -n | tail -1)
+            LATEST_NUM=$(git tag -l "${PREFIX}-*" | sed "s/^${PREFIX}-//" | grep -E '^[0-9]+-' | cut -d- -f1 | sort -n | tail -1)
             BUILD_NUM=$(( ${LATEST_NUM:-0} + 1 ))
 
             TAG="${PREFIX}-${BUILD_NUM}-${HASH}"
