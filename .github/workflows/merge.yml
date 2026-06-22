@@ -23,6 +23,7 @@ jobs:
           fetch-depth: '0'
 
       - name: Build, tag, and upload
+        id: release
         shell: bash
         run: |
           set -euo pipefail
@@ -52,15 +53,27 @@ jobs:
 
           CHANGED=$(jq -r '.tasks[] | select(.taskId | endswith("#build")) | select(.cache.status == "MISS") | .package' "$SUMMARY")
 
+          echo "fe_miss=false" >> "$GITHUB_OUTPUT"
+          echo "be_miss=false" >> "$GITHUB_OUTPUT"
+
           if [ -z "$CHANGED" ]; then
             echo "::notice::All builds cached — nothing to tag"
+            exit 0
           fi
 
           for pkg in $CHANGED; do
             case "$pkg" in
-              frontend) PREFIX="fe" ;;
-              backend)  PREFIX="be" ;;
-              *)        continue ;;
+              frontend)
+                PREFIX="fe"
+                echo "fe_miss=true" >> "$GITHUB_OUTPUT"
+                ;;
+              backend)
+                PREFIX="be"
+                echo "be_miss=true" >> "$GITHUB_OUTPUT"
+                ;;
+              *)
+                continue
+                ;;
             esac
 
             LATEST=$(git tag -l "${PREFIX}-v*" | sort -V | tail -1)
@@ -78,12 +91,14 @@ jobs:
           done
 
       - name: Upload frontend artifact
+        if: steps.release.outputs.fe_miss == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: fe-dist
           path: frontend/dist/
 
       - name: Upload backend artifact
+        if: steps.release.outputs.be_miss == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: be-dist
