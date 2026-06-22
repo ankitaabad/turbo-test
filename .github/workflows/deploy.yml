@@ -49,6 +49,7 @@ jobs:
         with:
           name: ${{ steps.resolve.outputs.artifact }}
           path: ./dist
+          github-token: ${{ github.token }}
 
       - name: Deploy
         run: |
