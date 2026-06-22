@@ -7,6 +7,7 @@
   ],
   "tasks": {
     "build": {
+      "outputs": ["dist/**"],
       "inputs": ["**", "!**/*.md"]
     },
     "lint": {
