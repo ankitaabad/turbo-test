@@ -3,7 +3,9 @@
   "globalDependencies": [
     "tsconfig.base.json",
     "biome.json",
-    "pnpm-workspace.yaml"
+    "pnpm-workspace.yaml",
+    ".github/workflows/**",
+    ".github/actions/**"
   ],
   "tasks": {
     "build": {
