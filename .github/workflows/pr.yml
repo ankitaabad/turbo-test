@@ -12,6 +12,8 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: ./.github/actions/setup
 
       - run: pnpm turbo lint typecheck
@@ -20,6 +22,8 @@ jobs:
     needs: checks
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: ./.github/actions/setup
 
       - run: pnpm turbo build

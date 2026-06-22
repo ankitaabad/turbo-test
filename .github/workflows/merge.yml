@@ -12,6 +12,8 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: ./.github/actions/setup
 
       - run: pnpm turbo lint typecheck
@@ -23,13 +25,17 @@ jobs:
       contents: write
       actions: read
     steps:
-      - uses: ./.github/actions/setup
+      - uses: actions/checkout@v4
         with:
           fetch-depth: '0'
+
+      - uses: ./.github/actions/setup
 
       - name: Build, tag, and upload
         id: release
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -49,27 +55,41 @@ jobs:
             local prefix=$1 pkg=$2 hash=$3
             local latest tag num
 
-            latest=$(git tag -l "${prefix}-*" | sed "s/^${prefix}-//" | grep -E '^[0-9]+-' | cut -d- -f1 | sort -n | tail -1)
+            echo "::debug::tag_package: prefix=${prefix} pkg=${pkg} hash=${hash}"
+
+            latest=$(git tag -l "${prefix}-*" | sed -n "s/^${prefix}-\([0-9]\{1,\}\)-.*/\1/p" | sort -n | tail -1)
             num=$(( ${latest:-0} + 1 ))
             tag="${prefix}-${num}-${hash}"
 
+            echo "::debug::tag_package: latest=${latest:-none} num=${num} tag=${tag}"
+
             git tag -a "$tag" -m "turbo-hash: ${hash}"
+            echo "::debug::tag_package: git tag OK"
+
             git push origin "$tag"
+            echo "::debug::tag_package: git push OK"
+
             echo "::notice::Created tag ${tag}"
 
+            mkdir -p "${pkg}/dist"
             printf '{"tag":"%s","buildNumber":%s,"hash":"%s"}\n' "$tag" "$num" "$hash" > "${pkg}/dist/manifest.json"
+            echo "::debug::tag_package: manifest written, done"
           }
 
-          DRY_JSON=$(pnpm turbo build --dry=json 2>&1 | tail -n +2)
+          echo "::debug::Running dry run..."
+          DRY_JSON=$(pnpm turbo build --dry=json 2>&1 | sed -n '/^{/,$ p')
+          echo "::debug::Dry run captured (${#DRY_JSON} bytes)"
 
           FE_HASH=$(dry_hash frontend)
           BE_HASH=$(dry_hash backend)
+          echo "::debug::FE_HASH=${FE_HASH:-empty} BE_HASH=${BE_HASH:-empty}"
 
           FE_UPLOAD=false
           BE_UPLOAD=false
           NEED_BUILD=false
 
           if [ -n "$FE_HASH" ] && ! artifact_exists "fe-${FE_HASH}"; then
+            echo "::debug::FE needs upload"
             FE_UPLOAD=true
             NEED_BUILD=true
           else
@@ -77,28 +97,30 @@ jobs:
           fi
 
           if [ -n "$BE_HASH" ] && ! artifact_exists "be-${BE_HASH}"; then
+            echo "::debug::BE needs upload"
             BE_UPLOAD=true
             NEED_BUILD=true
           else
             echo "::notice::Artifact be-${BE_HASH:-?} already exists — skipping"
           fi
 
+          echo "::debug::NEED_BUILD=${NEED_BUILD} FE_UPLOAD=${FE_UPLOAD} BE_UPLOAD=${BE_UPLOAD}"
+
           if [ "$NEED_BUILD" = true ]; then
-            FILTERS=""
-            if [ "$FE_UPLOAD" = true ]; then
-              FILTERS="${FILTERS} --filter=frontend..."
-            fi
-            if [ "$BE_UPLOAD" = true ]; then
-              FILTERS="${FILTERS} --filter=backend..."
-            fi
-            pnpm turbo build $FILTERS
+            pnpm turbo build
+            echo "::debug::Build finished"
           fi
 
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
           if [ "$FE_UPLOAD" = true ]; then
+            echo "::debug::Tagging and uploading frontend..."
             tag_package "fe" "frontend" "$FE_HASH"
           fi
 
           if [ "$BE_UPLOAD" = true ]; then
+            echo "::debug::Tagging and uploading backend..."
             tag_package "be" "backend" "$BE_HASH"
           fi
 
@@ -106,6 +128,8 @@ jobs:
           echo "frontend_hash=${FE_HASH:-}" >> "$GITHUB_OUTPUT"
           echo "backend_upload=${BE_UPLOAD}" >> "$GITHUB_OUTPUT"
           echo "backend_hash=${BE_HASH:-}" >> "$GITHUB_OUTPUT"
+
+          echo "::debug::Script finished OK"
 
       - name: Upload frontend artifact
         if: steps.release.outputs.frontend_upload == 'true'
