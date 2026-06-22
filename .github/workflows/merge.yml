@@ -84,7 +84,14 @@ jobs:
           fi
 
           if [ "$NEED_BUILD" = true ]; then
-            pnpm turbo build
+            FILTERS=""
+            if [ "$FE_UPLOAD" = true ]; then
+              FILTERS="${FILTERS} --filter=frontend..."
+            fi
+            if [ "$BE_UPLOAD" = true ]; then
+              FILTERS="${FILTERS} --filter=backend..."
+            fi
+            pnpm turbo build $FILTERS
           fi
 
           if [ "$FE_UPLOAD" = true ]; then
