@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: merge
+  cancel-in-progress: false
+
 jobs:
   checks:
     runs-on: ubuntu-latest
