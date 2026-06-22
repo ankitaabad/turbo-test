@@ -16,7 +16,7 @@ jobs:
           echo "::error::Deploy can only be triggered from a tag, not a branch"
           exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
@@ -45,7 +45,7 @@ jobs:
           echo "::notice::Resolved ${TAG} → artifact ${ARTIFACT}"
 
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ steps.resolve.outputs.artifact }}
           path: ./dist

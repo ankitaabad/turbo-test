@@ -12,7 +12,7 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup
 
@@ -28,7 +28,7 @@ jobs:
       contents: write
       actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: '0'
 
@@ -138,14 +138,14 @@ jobs:
 
       - name: Upload frontend artifact
         if: steps.release.outputs.frontend_upload == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fe-${{ steps.release.outputs.frontend_hash }}
           path: frontend/dist/
 
       - name: Upload backend artifact
         if: steps.release.outputs.backend_upload == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: be-${{ steps.release.outputs.backend_hash }}
           path: backend/dist/
