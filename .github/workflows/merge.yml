@@ -16,7 +16,7 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      - run: pnpm turbo lint typecheck --remote-cache
+      - run: pnpm turbo lint typecheck --remote-only
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ vars.TURBO_TEAM }}
@@ -82,7 +82,7 @@ jobs:
           }
 
           echo "::debug::Running dry run..."
-          DRY_JSON=$(pnpm turbo build --dry=json --remote-cache 2>&1 | sed -n '/^{/,$ p')
+          DRY_JSON=$(pnpm turbo build --dry=json 2>&1 | sed -n '/^{/,$ p')
           echo "::debug::Dry run captured (${#DRY_JSON} bytes)"
 
           FE_HASH=$(dry_hash frontend)
@@ -112,7 +112,7 @@ jobs:
           echo "::debug::NEED_BUILD=${NEED_BUILD} FE_UPLOAD=${FE_UPLOAD} BE_UPLOAD=${BE_UPLOAD}"
 
           if [ "$NEED_BUILD" = true ]; then
-            pnpm turbo build --remote-cache
+            pnpm turbo build --remote-only
             echo "::debug::Build finished"
           fi
 
