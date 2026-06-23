@@ -16,10 +16,32 @@ jobs:
 
       - uses: ./.github/actions/node-pnpm
 
-      - run: pnpm turbo lint typecheck --remote-only
+      - uses: reviewdog/action-setup@v1
+        with:
+          reviewdog_version: latest
+
+      - name: Run lint + typecheck
+        id: checks
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          pnpm turbo lint typecheck --remote-only --output-logs=errors-only 2>&1 | tee /tmp/turbo.log
+          TURBO_EXIT=$?
+
+          grep -E ':typecheck:.*: error TS' /tmp/turbo.log | \
+          sed -E 's/^([a-zA-Z0-9]+):typecheck: /\1\//' | \
+          reviewdog \
+            -efm='%f(%l\,%c): %trror %n: %m' \
+            -name="lint+typecheck" \
+            -reporter=github-pr-review \
+            -level=error \
+            -filter-mode=file \
+            -tee || true
+
+          exit $TURBO_EXIT
 
   build:
     needs: checks
